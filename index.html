@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xak osint</title>
+    <style>
+        * { box-sizing: border-box; }
+        body, html { 
+            height: 100%; 
+            margin: 0; 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            background: #0f0f0f; 
+            color: #00ff00; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            overflow: hidden; 
+        }
+        .app-container { 
+            background: #1a1a1a; 
+            width: 90%; 
+            max-width: 450px; 
+            padding: 2rem; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            border: 1px solid #333;
+        }
+        h2 { margin-top: 0; color: #00ff00; text-align: center; font-size: 1.5rem; }
+        .stats { display: flex; justify-content: space-between; font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
+        #timer { color: #00ff00; font-weight: bold; }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            background: #252525; 
+            border: 1px solid #00ff00; 
+            border-radius: 8px; 
+            color: white; 
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        button { 
+            width: 100%; 
+            padding: 14px; 
+            background: #00ff00; 
+            color: #000; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
+        button:disabled { background: #444; cursor: not-allowed; }
+        #console { 
+            margin-top: 1rem; 
+            background: #000; 
+            border-radius: 8px; 
+            height: 100px; 
+            padding: 10px; 
+            font-family: monospace; 
+            font-size: 0.75rem; 
+            overflow-y: auto; 
+            border: 1px solid #00ff00;
+        }
+        #downloadArea { margin-top: 1rem; display: none; }
+        .download-btn { 
+            background: #00ff00; 
+            color: white; 
+            text-decoration: none; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            height: 48px; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <marquee>XAK OSINT</marquee>
+    <br><br>
+    
+    
+    <div class="stats">
+      
+        <span>Elapsed: <span id="timer">00:00</span></span>
+        <span id="statusTxt">© PaNdAxAk</span>
+    </div>
+
+    <input type="text" id="query" placeholder="url/mail/others">
+    <button id="startBtn">Start Search</button>
+    
+    <div id="console"></div>
+
+    <div id="downloadArea">
+        <a id="finalDownload" href="#" class="download-btn">Download Results</a>
+    </div>
+</div>
+
+<script>
+    const CF_CLEARANCE = "aMGJd9UFFZN6xSsYQGNgKo36sI5MJnU6YZKJVxe80BY-1775752804-1.2.1.1-TO_cUSq.BiEV6Zjh.vUp9BFNIjt.EGJ5zk84s5pthGnzBmCBjz_zcD_yk8qkJg3.Y6jKGKAzTSA6_3HFXw9vRV2P4NC9ChODnC.BcI_CcuG9glopC8TkO4VCmPgy84Bky8p2VbbJWy_VV1WLHEcNFATx9PajKUiXvAg89AC.xN6Zj0QhAX9AeTWRtabQgaw4Gyl6G2vcVL9mwSYQDoDxliewcHha64oZUtEZso.yv9tN5h_ddYnjm.7kEyWRX22nq5mBl751qJpwUrZINQ1ZYlGCrBmAsHGxp0XvtMGINTNugddfPSNhz6f3q6qh0kt0t89Kkmm8ubyh2.bqkkJtzQ";
+    const BASE_URL = "https://vulta.pw/api/v1";
+    const AUTH = { email: "su8sue@gsgs.com", pass: "1q2w3e" };
+
+    let startTime, timerInterval;
+
+    function addLog(text) {
+        const log = document.getElementById('console');
+        log.innerHTML += `<div>> ${text}</div>`;
+        log.scrollTop = log.scrollHeight;
+    }
+
+    async function runTask() {
+        const queryVal = document.getElementById('query').value;
+        if (!queryVal) return;
+
+        // UI Reset
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('downloadArea').style.display = 'none';
+        document.getElementById('console').innerHTML = '';
+        startTime = new Date();
+        timerInterval = setInterval(() => {
+            const diff = Math.floor((new Date() - startTime) / 1000);
+            document.getElementById('timer').textContent = `${String(Math.floor(diff/60)).padStart(2,'0')}:${String(diff%60).padStart(2,'0')}`;
+        }, 1000);
+
+        try {
+            // 1. Login
+            const fd = new FormData(); fd.append('username', AUTH.email); fd.append('password', AUTH.pass);
+            const lRes = await fetch(`${BASE_URL}/login/access-token`, { method: 'POST', body: fd });
+            const { access_token } = await lRes.json();
+
+            // 2. Search
+            addLog("Searching...");
+            const sRes = await fetch(`${BASE_URL}/search/init`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${access_token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: queryVal })
+            });
+            const { search_id } = await sRes.json();
+
+            // 3. WS Wait
+            const count = await new Promise(r => {
+                const ws = new WebSocket(`wss://vulta.pw/api/v1/search/ws/${search_id}`);
+                ws.onmessage = e => { const d = JSON.parse(e.data); if(d.status==="completed"||d.total_found>0){ws.close(); r(d.total_found);}};
+            });
+
+            if (count > 0) {
+                addLog(`Found ${count} lines. Ordering...`);
+                const oRes = await fetch(`${BASE_URL}/search/order`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${access_token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ search_id, requested_lines: count })
+                });
+                const { order_id } = await oRes.json();
+
+                // 4. Final Link
+                const dlUrl = await new Promise(r => {
+                    const ws = new WebSocket(`wss://vulta.pw/api/v1/search/order/ws/${order_id}`);
+                    ws.onmessage = e => { const d = JSON.parse(e.data); if(d.download_url){ws.close(); r(d.download_url);}};
+                });
+
+                // Show Download
+                const dlBtn = document.getElementById('finalDownload');
+                dlBtn.href = dlUrl;
+                dlBtn.setAttribute('download', `${queryVal}.txt`);
+                document.getElementById('downloadArea').style.display = 'block';
+                addLog("Done! Click button to save.");
+            } else {
+                addLog("No results.");
+            }
+        } catch (e) { addLog("Error occurred."); }
+        clearInterval(timerInterval);
+        document.getElementById('startBtn').disabled = false;
+    }
+
+    document.getElementById('startBtn').addEventListener('click', runTask);
+</script>
+</body>
+</html>
